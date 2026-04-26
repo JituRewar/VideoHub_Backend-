@@ -10,7 +10,7 @@ import {
 } from "../controllers/Video.controller.js";
 
 import { verifyJWT } from "../middlewares/auth.middleware.js";
-import { upload } from "../middlewares/multer.middleware.js";
+import { upload } fromfrom "../middlewares/multer.middleware.js";
 
 const router = Router();
 
