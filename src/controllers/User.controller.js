@@ -25,18 +25,7 @@ const generateAccessAndRefreshToken = async (userId) => {
 };
 
 const registerUser = asyncHandler(async (req, res) => {
-  //get user details from frontent
-  //validation --not empty
-  //check if user already exist:username,email
-  //check for images, check for avatar
-  //upload them to cloudinary, avatar
-  //create user object - create entry in db
-  //remove password and refresh token field from response
-  //check for user creation
-  //return res
-
   const { fullName, email, username, password } = req.body;
-  // console.log("email", email);
 
   if (
     [fullName, email, username, password].some((field) => field?.trim() === "")
@@ -88,7 +77,6 @@ const registerUser = asyncHandler(async (req, res) => {
       .status(201)
       .json(new ApiResponse(200, createdUser, "User registered Successfully"));
   } catch (error) {
-    // handle duplicate key error for username and email
     if (error.code === 11000) {
       const field = Object.keys(error.keyPattern)[0];
 
@@ -126,9 +114,8 @@ const loginUser = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Invalid credentials");
   }
 
-  const { accessToken, refreshToken } = await generateAccessAndRefreshToken(
-    user._id
-  );
+  const { accessToken, refreshToken } =
+    await generateAccessAndRefreshToken(user._id);
 
   const loggedInUser = await User.findById(user._id).select(
     "-password -refreshToken"
@@ -136,8 +123,8 @@ const loginUser = asyncHandler(async (req, res) => {
 
   const options = {
     httpOnly: true,
-    secure: false,
-    sameSite: "lax",
+    secure: true,
+    sameSite: "None",
   };
 
   return res
@@ -148,7 +135,6 @@ const loginUser = asyncHandler(async (req, res) => {
       success: true,
       data: {
         user: loggedInUser,
-        accessToken,
       },
     });
 });
@@ -158,16 +144,18 @@ const logoutUser = asyncHandler(async (req, res) => {
     req.user._id,
     {
       $set: {
-        refreshToken: 1,
+        refreshToken: null,
       },
     },
     {
       new: true,
     }
   );
+
   const options = {
     httpOnly: true,
     secure: true,
+    sameSite: "None",
   };
 
   return res
@@ -196,26 +184,28 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     if (!user) {
       throw new ApiError(401, "unauthorised refreshToken");
     }
+
     if (incomingRefreshToken !== user?.refreshToken) {
       throw new ApiError(401, "refreshToken is expired or used");
     }
 
+    const { accessToken, refreshToken } =
+      await generateAccessAndRefreshToken(user._id);
+
     const options = {
       httpOnly: true,
       secure: true,
+      sameSite: "None",
     };
-
-    const { accessToken, newrefreshToken } =
-      await generateAccessAndRefreshToken(user._id);
 
     return res
       .status(200)
       .cookie("accessToken", accessToken, options)
-      .cookie("refreshToken", newrefreshToken, options)
+      .cookie("refreshToken", refreshToken, options)
       .json(
         new ApiResponse(
           200,
-          { accessToken, newrefreshToken },
+          { accessToken },
           "Access token refreshed successfully"
         )
       );
@@ -259,12 +249,13 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
     req.user?._id,
     {
       $set: {
-        fullName: fullName,
-        email: email,
+        fullName,
+        email,
       },
     },
     { new: true }
   ).select("-password");
+
   return res
     .status(200)
     .json(new ApiResponse(200, user, "Account details updated successfully"));
@@ -357,12 +348,8 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
     },
     {
       $addFields: {
-        subscribersCount: {
-          $size: "$subscribers",
-        },
-        channelSubscribedToCount: {
-          $size: "$subscribedTo",
-        },
+        subscribersCount: { $size: "$subscribers" },
+        channelSubscribedToCount: { $size: "$subscribedTo" },
         isSubscribed: {
           $cond: {
             if: { $in: [req.user?._id, "$subscribers.subscriber"] },
@@ -431,9 +418,7 @@ const getWatchhistory = asyncHandler(async (req, res) => {
           },
           {
             $addFields: {
-              owner: {
-                $first: "$owner",
-              },
+              owner: { $first: "$owner" },
             },
           },
         ],
@@ -460,7 +445,7 @@ const addToWatchHistory = asyncHandler(async (req, res) => {
   }
 
   await User.findByIdAndUpdate(req.user._id, {
-    $addToSet: { watchHistory: videoId }, // no duplicates
+    $addToSet: { watchHistory: videoId },
   });
 
   return res
